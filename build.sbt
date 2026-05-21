@@ -96,13 +96,14 @@ lazy val http4s = crossProject(JVMPlatform, JSPlatform, NativePlatform)
   .settings(
     name                 := "mcp-http4s",
     libraryDependencies ++= Seq(
-      "org.http4s"    %%% "http4s-dsl"          % "0.23.34",
-      "org.http4s"    %%% "http4s-ember-server" % "0.23.34",
-      "org.http4s"    %%% "http4s-client"       % "0.23.34",
-      "org.http4s"    %%% "http4s-circe"        % "0.23.34",
-      "org.http4s"    %%% "http4s-ember-client" % "0.23.34" % Test,
-      "org.scalameta" %%% "munit"               % "1.0.0"   % Test,
-      "org.typelevel" %%% "munit-cats-effect"   % "2.2.0"   % Test
+      "org.http4s"         %%% "http4s-dsl"          % "0.23.34",
+      "org.http4s"         %%% "http4s-ember-server" % "0.23.34",
+      "org.http4s"         %%% "http4s-client"       % "0.23.34",
+      "org.http4s"         %%% "http4s-circe"        % "0.23.34",
+      "org.http4s"         %%% "http4s-ember-client" % "0.23.34" % Test,
+      "org.scalameta"      %%% "munit"               % "1.0.0"   % Test,
+      "org.typelevel"      %%% "munit-cats-effect"   % "2.2.0"   % Test,
+      "com.alejandrohdezma" %% "http4s-munit"        % "2.0.0"   % Test
     )
   )
   .jvmSettings(
