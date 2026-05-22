@@ -58,7 +58,8 @@ class StreamingMcpHttpBuilder[F[_]: Async, A, Ctx] private[http4s] (
     val mIcons: List[Icon] = Nil,
     val mWebsiteUrl: Option[String] = None,
     val mExtraRoutes: HttpRoutes[F],
-    val mToolMiddlewares: List[ToolMiddleware[F, Ctx]] = Nil
+    val mToolMiddlewares: List[ToolMiddleware[F, Ctx]] = Nil,
+    val mObservers: List[McpObserver[F]] = Nil
 ):
 
   private def copy[A2, Ctx2](
@@ -88,13 +89,14 @@ class StreamingMcpHttpBuilder[F[_]: Async, A, Ctx] private[http4s] (
       mWebsiteUrl: Option[String] = this.mWebsiteUrl,
       mExtraRoutes: HttpRoutes[F] = this.mExtraRoutes,
       mToolMiddlewares: List[ToolMiddleware[F, Ctx2]] =
-        this.mToolMiddlewares.asInstanceOf[List[ToolMiddleware[F, Ctx2]]]
+        this.mToolMiddlewares.asInstanceOf[List[ToolMiddleware[F, Ctx2]]],
+      mObservers: List[McpObserver[F]] = this.mObservers
   ): StreamingMcpHttpBuilder[F, A2, Ctx2] =
     new StreamingMcpHttpBuilder[F, A2, Ctx2](
       mName, mVersion, mConfig, mAuthInfo, mStatefulCreators, mAuthExtractor, mPlainTools, mContextTools,
       mPlainResources, mContextResourceResolvers, mPlainResourceTemplates, mContextResourceTemplateResolvers,
       mPlainPrompts, mContextPromptResolvers, mCaps, mSessionStore, mSinkFactory, mSessionRefsFactory,
-      mSessionStoreFactory, mTitle, mDescription, mIcons, mWebsiteUrl, mExtraRoutes, mToolMiddlewares
+      mSessionStoreFactory, mTitle, mDescription, mIcons, mWebsiteUrl, mExtraRoutes, mToolMiddlewares, mObservers
     )
 
   // ── Config ──────────────────────────────────────────────────────────
@@ -131,6 +133,13 @@ class StreamingMcpHttpBuilder[F[_]: Async, A, Ctx] private[http4s] (
   /** Append a server-wide tool middleware. Composed around every tool call, OUTSIDE any per-tool middleware. */
   def withToolMiddleware(mw: ToolMiddleware[F, Ctx]): StreamingMcpHttpBuilder[F, A, Ctx] =
     copy(mToolMiddlewares = mToolMiddlewares :+ mw)
+
+  /** Append a transport-level observation hook. Fires on `initialize`, `tools/call` (and every other `POST /mcp`
+    * method), and `DELETE /mcp`. Multiple observers can be registered — they're invoked in registration order via
+    * [[McpObserver.combineAll]].
+    */
+  def withObserver(observer: McpObserver[F]): StreamingMcpHttpBuilder[F, A, Ctx] =
+    copy(mObservers = mObservers :+ observer)
 
   // ── Session store / factory configuration ──────────────────────────
 
@@ -402,6 +411,7 @@ class StreamingMcpHttpBuilder[F[_]: Async, A, Ctx] private[http4s] (
     mSessionRefsFactory.getOrElse(_ => SessionRefs.inMemory[F])
 
   def routes(using UUIDGen[F]): Resource[F, HttpRoutes[F]] =
+    val observer = McpObserver.combineAll(mObservers)
     if hasPredicatedTools && mAuthInfo.isEmpty then
       Resource.eval(
         Async[F].raiseError[HttpRoutes[F]](
@@ -427,7 +437,8 @@ class StreamingMcpHttpBuilder[F[_]: Async, A, Ctx] private[http4s] (
               Async[F].pure(info.onForbidden),
               sinkFactory,
               refsFactory,
-              store
+              store,
+              observer
             )(using Async[F], summon[UUIDGen[F]], info.eqAny)
           }
         case None =>
@@ -450,7 +461,7 @@ class StreamingMcpHttpBuilder[F[_]: Async, A, Ctx] private[http4s] (
           storeR.flatMap { store =>
             val serverF: (String, SessionContext[F]) => F[Server[F]] =
               (id, ctx) => newSessionFactory(id)(ctx)
-            StreamableHttpTransport.routes(serverF, sinkFactory, refsFactory, store)
+            StreamableHttpTransport.routes(serverF, sinkFactory, refsFactory, store, observer)
           }
 
 object StreamingMcpHttpBuilder:
